@@ -3,9 +3,12 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Newtonsoft.Json;
 using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
+using System.Diagnostics;
 
 namespace texture_unpacker
 {
@@ -54,31 +57,36 @@ namespace texture_unpacker
 
                     unpackedPvr.Seek(0, SeekOrigin.Begin);
 
-                    using (var pvrFile = File.Create(spriteResource.resource.meta.image + ".pvr"))
-                    {
-                        unpackedPvr.CopyTo(pvrFile);
-                    }
-
-                    unpackedPvr.Seek(0, SeekOrigin.Begin);
-
                     uint version = Read32(unpackedPvr);
-                    System.Diagnostics.Debug.Assert(version == 0x03525650, "Endianness is correct as per PVR documentation.");
+                    Debug.Assert(version == 0x03525650, "Endianness is correct as per PVR documentation.");
                     uint flags = Read32(unpackedPvr);
-                    uint format_zero = Read32(unpackedPvr);
-                    uint format = Read32(unpackedPvr);
+                    Debug.Assert(flags == 2, "Premultiplied alpha");
+                    uint format_channels = Read32(unpackedPvr);
+                    Debug.Assert(format_channels != 0, "We only use non zero channels format type.");
+                    uint format_bitness = Read32(unpackedPvr);
                     uint colorSpace = Read32(unpackedPvr);
+                    Debug.Assert(colorSpace == 0, "Linear RGB.");
                     uint channelType = Read32(unpackedPvr);
+                    Debug.Assert(channelType == 0, "Unsigned byte normalized channel type.");
                     uint height = Read32(unpackedPvr);
                     uint width = Read32(unpackedPvr);
                     uint depth = Read32(unpackedPvr);
+                    Debug.Assert(depth == 1, "Depth is 1.");
                     uint numSurfaces = Read32(unpackedPvr);
+                    Debug.Assert(numSurfaces == 1, "Only one surface.");
                     uint numFaces = Read32(unpackedPvr);
+                    Debug.Assert(numFaces == 1, "Only one face.");
                     uint mipMapCount = Read32(unpackedPvr);
+                    Debug.Assert(mipMapCount == 1, "Only one mip map.");
                     uint metadataSize = Read32(unpackedPvr);
 
+                    string channels = System.Text.Encoding.ASCII.GetString(BitConverter.GetBytes(format_channels));
+                    string bitness = string.Concat(BitConverter.GetBytes(format_bitness));
+                    string format = $"{channels}{bitness}";
+                    Debug.Assert(format == "rgba8888" || format == "rgba4444", "Only two pixel formats are supported.");
+                    
                     Console.WriteLine($"Flags {flags:X}");
-                    if (format_zero == 0) Console.WriteLine($"Format {format}");
-                    else Console.WriteLine($"Format {System.Text.Encoding.ASCII.GetString(BitConverter.GetBytes(format_zero))}{String.Concat(BitConverter.GetBytes(format).Select(x => x.ToString()))}");
+                    Console.WriteLine($"Format {format}");
                     Console.WriteLine($"Color space {colorSpace}");
                     Console.WriteLine($"Channel type {channelType}");
                     Console.WriteLine($"Height {height}");
@@ -90,6 +98,33 @@ namespace texture_unpacker
                     Console.WriteLine($"Metadata size {metadataSize}");
 
                     unpackedPvr.Seek(metadataSize, SeekOrigin.Current);
+
+                    // for each Row in Height
+                    //     for each Pixel in Width
+                    //         Byte data[Size_Based_On_PixelFormat]
+                    //     end
+                    // end
+
+                    bool is8BitPerChannel = format == "rgba8888";
+                    if (is8BitPerChannel)
+                    {
+                        using (Image<Rgba32> image = new Image<Rgba32>((int)width, (int)height))
+                        {
+                            for (int y = 0; y < image.Height; y++)
+                            {
+                                Span<Rgba32> pixelRowSpan = image.GetPixelRowSpan(y);
+                                for (int x = 0; x < image.Width; x++)
+                                {
+                                    pixelRowSpan[x] = new Rgba32(Read32(unpackedPvr));
+                                }
+                            }
+
+                            using (var pvrFile = File.Create(spriteResource.resource.meta.image))
+                            {
+                                image.SaveAsPng(pvrFile);
+                            }
+                        }
+                    }
                 }
             }
         }
