@@ -119,9 +119,21 @@ namespace texture_unpacker
                                 }
                             }
 
-                            using (var pvrFile = File.Create(spriteResource.resource.meta.image))
+                            using (Image<Rgba32> cutImage = new Image<Rgba32>(spriteResource.resource.frames[0].frame.w, spriteResource.resource.frames[0].frame.h))
                             {
-                                image.SaveAsPng(pvrFile);
+                                for (int y = 0; y < cutImage.Height; y++)
+                                {
+                                    Span<Rgba32> pixelRowSpan = cutImage.GetPixelRowSpan(y);
+                                    for (int x = 0; x < cutImage.Width; x++)
+                                    {
+                                        pixelRowSpan[x] = image[spriteResource.resource.frames[0].frame.x + x, spriteResource.resource.frames[0].frame.y + y];
+                                    }
+                                }
+
+                                using (var pvrFile = File.Create(spriteResource.resource.meta.image))
+                                {
+                                    cutImage.SaveAsPng(pvrFile);
+                                }
                             }
                         }
                     }
