@@ -171,10 +171,13 @@ namespace TextureUnpacker
         static uint Read16(MemoryStream stream)
         {
             uint result = 0;
-            result |= (uint)(((stream.ReadByte() & 0xFF00) >> 2) << 0);
-            result |= (uint)((stream.ReadByte() & 0x00FF) << 8);
-            result |= (uint)(((stream.ReadByte() & 0xFF00) >> 2) << 16);
-            result |= (uint)((stream.ReadByte() & 0x00FF) << 24);
+            uint byte_one = (uint)stream.ReadByte();
+            uint byte_two = (uint)stream.ReadByte();
+
+            result |= ((((byte_two & 0x000000_F0) >> 4) * 17) << 0);
+            result |= ((((byte_two & 0x000000_0F) >> 0) * 17) << 8);
+            result |= ((((byte_one & 0x000000_F0) >> 4) * 17) << 16);
+            result |= ((((byte_one & 0x000000_0F) >> 0) * 17) << 24);
             return result;
         }
     }
