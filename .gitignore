@@ -3,3 +3,5 @@ obj/
 resources/
 *.pvr
 *.png
+.vscode/
+out/
